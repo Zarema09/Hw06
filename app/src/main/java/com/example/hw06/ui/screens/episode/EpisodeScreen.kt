@@ -1,4 +1,3 @@
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,12 +7,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
@@ -26,27 +26,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
-import coil.compose.rememberAsyncImagePainter
-import com.example.hw06.data.dto.location.LocationResponseDto
-import com.example.hw06.ui.screens.location.LocationViewModel
+import com.example.hw06.data.dto.episodes.EpisodesResponseDto
+import com.example.hw06.ui.screens.episode.EpisodesViewModel
 import org.koin.androidx.compose.koinViewModel
 
 @Composable
-fun LocationScreen(
+fun EpisodeScreen(
     navController: NavHostController,
-    viewModel: LocationViewModel = koinViewModel()
+    viewModel: EpisodesViewModel = koinViewModel()
 ) {
-    val locations = viewModel.locationPager.collectAsLazyPagingItems()
+    val episodes = viewModel.episodesPager.collectAsLazyPagingItems()
     val filters = viewModel.filters.value
     var showFilterDialog by remember { mutableStateOf(false) }
     var tempName by remember { mutableStateOf(filters.name ?: "") }
-    var tempType by remember { mutableStateOf(filters.type) }
-    var tempDimension by remember { mutableStateOf(filters.dimension) }
+    var tempEpisode by remember { mutableStateOf(filters.episode) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TextField(
@@ -70,9 +68,8 @@ fun LocationScreen(
             Button(onClick = {
                 viewModel.resetFilters()
                 tempName = ""
-                tempType = null
-                tempDimension = null
-                locations.refresh()
+                tempEpisode = null
+                episodes.refresh()
             }) {
                 Text("Reset")
             }
@@ -82,16 +79,16 @@ fun LocationScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(16.dp)
         ) {
-            items(count = locations.itemCount) { index ->
-                val location = locations[index]
-                location?.let {
-                    LocationItem(location = it) {
-                        navController.navigate("location_detail/${it.id}")
+            items(count = episodes.itemCount) { index ->
+                val episode = episodes[index]
+                episode?.let {
+                    EpisodeItem(episode = it) {
+                        navController.navigate("episode_detail/${it.id}")
                     }
                 }
             }
 
-            locations.apply {
+            episodes.apply {
                 when {
                     loadState.refresh is LoadState.Loading -> {
                         item {
@@ -114,12 +111,19 @@ fun LocationScreen(
                         }
                     }
                     loadState.refresh is LoadState.Error -> {
-                        val e = loadState.refresh as LoadState.Error
                         item {
+                            val e = loadState.refresh as LoadState.Error
                             Text(
                                 text = "Ошибка загрузки: ${e.error.localizedMessage}",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(16.dp)
+                            )
+                        }
+                    }
+                    loadState.append is LoadState.Error -> {
+                        item {
+                            val e = loadState.append as LoadState.Error
+                            Text(
+                                text = "Ошибка загрузки дополнительных эпизодов: ${e.error.localizedMessage}",
                                 modifier = Modifier.padding(16.dp)
                             )
                         }
@@ -128,30 +132,21 @@ fun LocationScreen(
             }
         }
     }
+
     if (showFilterDialog) {
         AlertDialog(
             onDismissRequest = { showFilterDialog = false },
-            title = { Text("Filter Locations") },
+            title = { Text("Filter Episodes") },
             text = {
                 Column {
-                    Text("Type", style = MaterialTheme.typography.titleMedium)
-                    listOf("Planet", "Space Station", "Microverse").forEach { type ->
+                    Text("Episode", style = MaterialTheme.typography.titleMedium)
+                    listOf("S01E01", "S02E01", "S03E01").forEach { ep ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(
-                                selected = tempType == type.lowercase(),
-                                onClick = { tempType = type.lowercase() }
+                                selected = tempEpisode == ep,
+                                onClick = { tempEpisode = ep }
                             )
-                            Text(type)
-                        }
-                    }
-                    Text("Dimension", style = MaterialTheme.typography.titleMedium)
-                    listOf("Dimension C-137", "Unknown", "Replacement Dimension").forEach { dim ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(
-                                selected = tempDimension == dim.lowercase(),
-                                onClick = { tempDimension = dim.lowercase() }
-                            )
-                            Text(dim)
+                            Text(ep)
                         }
                     }
                 }
@@ -160,11 +155,10 @@ fun LocationScreen(
                 Button(onClick = {
                     viewModel.updateFilters(
                         name = tempName.takeIf { it.isNotBlank() },
-                        type = tempType,
-                        dimension = tempDimension
+                        episode = tempEpisode
                     )
                     showFilterDialog = false
-                    locations.refresh()
+                    episodes.refresh()
                 }) {
                     Text("Apply")
                 }
@@ -179,33 +173,39 @@ fun LocationScreen(
 }
 
 @Composable
-fun LocationItem(location: LocationResponseDto.Location, onClick: () -> Unit) {
-    Row(
+fun EpisodeItem(
+    episode: EpisodesResponseDto.Episodes,
+    onClick: () -> Unit
+) {
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(8.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp)
     ) {
-        val painter = rememberAsyncImagePainter(model = location.imageUrl)
-        Image(
-            painter = painter,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            alignment = Alignment.Center,
-            contentScale = ContentScale.Crop
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column {
+        Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = location.name,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1
+                text = episode.name,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row {
+                Text(
+                    text = "Episode: ${episode.episode}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                Text(
+                    text = "Air Date: ${episode.airDate}",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = location.type,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                text = "Characters: ${episode.characters.size}",
+                style = MaterialTheme.typography.bodySmall
             )
         }
     }
